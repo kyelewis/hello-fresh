@@ -1,0 +1,6 @@
+{
+  "tasks": {
+    "start": "deno run --allow-env=FRSH_DEV_PREVIOUS_MANIFEST,DENO_DEPLOYMENT_ID --allow-read='./' --allow-write='./src/fresh.gen.ts' --allow-net='0.0.0.0:8080,deno.land,esm.sh,crux.land,unpkg.com' --watch=routes/ src/dev.ts"
+  },
+  "importMap": "./import_map.json"
+}
