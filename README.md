@@ -3,60 +3,65 @@
 This is my attempt to create a template scaffold for fresh that works the way i
 would like.
 
-The fresh docs don't document this, they reccomend to use fresh this way:
+The fresh docs don't document this, they provide this command to create a
+scaffold app:
 
 ```sh
 deno run -A -r https://fresh.deno.dev my-app
 ```
 
-This script redirects to the fresh `init.ts` script on deno.land
-(https://github.com/denoland/fresh/blob/main/init.ts), which roughly:
+This script redirects to the fresh `init.ts` script
+(https://github.com/denoland/fresh/blob/main/init.ts), which:
 
-- Checks if the directory provided as arg[0] is empty
-- Asks if you want to use twind, a css library at https://twind.dev/, and sets
-  it up with the template if so
-- Creates the structure
+- Checks if the directory provided as an argument is empty
+- Asks if you want to use twind, a styling library, and sets it up if sp
+- Creates the folder structure
 - Fills out a number of template files
 
 Let's do it all ourselves instead:
 
-### 1. Create the basic directory structure
+## 1. Create the basic directory structure
 
-The `fresh init` script doesn't use a src/ folder for holding the source code-
-but I much prefer this to help visually and logically seperate out source code
-from docs, metadata and dotfiles. It works fine with fresh.
+The official fresh `init` script doesn't use a src/ folder for holding the
+source code- but I much prefer this to help visually and logically seperate out
+source code from docs, metadata and dotfiles. It works fine with fresh.
 
-There are additional folders that fresh can look for: `public`, for holding
-static assets, `islands`, for creating client-side interactive components in
-fresh (by default, fresh content is server-side rendered), and `routes/api`, for
-creating APIs. Neither are needed for the most basic hello world example here,
-either can be added later.
+There are hardcoded folders that fresh looks for things in:
+
+- `public`, for holding static assets
+- `islands`, for creating client-side interactive components (everything else in
+  fresh is server-side rendered)
+- `routes`, for the routes to serve
+
+Only `routes` is required to get started, so we'll just create that one- explore
+the others as you go.
 
 ```sh
 mkdir -p src/routes
 ```
 
-### 2. Create a deno.json
+## 2. Create a deno.json (optional!)
 
-Fresh defines an import map and a start task here. This is technically optional,
-and you can just run the deno run script including a --import-map option, and
-remove this json all-together - but I do think that it is useful to have these
-documented and kept somewheres standard.
+`fresh` defines a task (`start`) and an import map in a `deno.json` config file.
+
+This is technically optional, and you can just run
+`deno run src/dev.ts --import-map ./import_map.json`, however I do think that it
+is useful to have these documented and kept somewhere standard.
 
 By default, fresh uses the `-A` flag from deno, which means "allow all
 permissions". This completely ignores the entire deno security model, and I hate
-it.
+it. However, having tried to actually specify the things it should be allowed
+access to, this is hard!
 
-Instead, I define a set of sensible allow flags to get started.
-
-The problem? fresh requires access to things it doesn't necessarily need access
-to- rather than error when it needs it, it errors ahead of time.
+I defined a set of sensible allow flags to get started, but it is not entirely
+complete yet.
 
 You'll need to give permission for:
 
 #### --allow-net
 
-- 0.0.0.0:8080 (or another port)
+- 0.0.0.0:8080 (or another port, if you choose) for the server to run on.
+
 - Each domain that source pulls down from, at a minimum:
   - deno.land (fresh@1.0.0)
   - esm.sh (preact)
@@ -67,7 +72,6 @@ You'll need to give permission for:
 
 - FRSH_DEV_PREVIOUS_MANIFEST
 - DENO_DEPLOYMENT_ID
-- plus any import.meta.env references that you use yourself
 
 #### --allow-read
 
@@ -89,21 +93,21 @@ https://deno.land/manual/tools/task_runner
 }
 ```
 
-### 3. Create the import map.
+## 3. Create the import map.
 
-What is an import map? It's a json file that allows a mapping from an import
-name to a file or URL.
+Remember that deno doesn't have a node_modules to resolve from.
 
-Remember that deno doesn't have a node_modules to resolve from. Historically in
-deno, packages have either directly included URLS, or used a `deps.ts` file to
-put all dependencies in the one place for use.
+Historically in deno, packages have either directly included URLs in the source,
+or used a `deps.ts` file to put all dependencies in the one place for use.
 
-Fresh uses the import maps feature in deno to resolve imports, for example, turn
-something like `import { r } from "preact"` into
+Fresh's template uses the import maps feature in deno to resolve imports, for
+example, turn something like `import { r } from "preact"` into
 `import { r } from  "https://esm.sh/preact@10.8.1"`.
 
 You'll notice multiple imports here: "preact" matches `from "preact"` but not
 `from "preact/..."`, so we need two for these cases.
+
+I'm not sure if you can just use a `deps.ts` instead of the import map.
 
 References: https://deno.land/manual/linking_to_external_code/import_maps WICG
 import maps proposal: https://github.com/WICG/import-maps importmap.json
@@ -119,7 +123,9 @@ import maps proposal: https://github.com/WICG/import-maps importmap.json
 }
 ```
 
-### 4. Create the main.ts and dev.ts files
+## 4. Create the main.ts and dev.ts files
+
+### main.ts
 
 `main.ts` is the main server entry point, and is fairly straightforward. It is
 passed in a manifest file, that is generated by the dev method when it is run.
@@ -128,41 +134,29 @@ The second argument to start is an options object to set, for example, the port
 or hostname of the server. You can also pass it a render function that can wrap
 the inner render function with access to the context.
 
-main.ts:
-
 ```ts
 import { start } from 'fresh/server.ts"';
 import manifest from "./fresh.gen.ts";
 await start(manifest, { port: 8080 });
 ```
 
-`dev.ts` is a wrapper that generates the manifest file.
+### dev.ts
 
-- Takes two arguments, the base and the entrypoint, which it passses directly to
-  `new URL(entrypoint, base)` to get the entrypoint.
-
-- It walks the `routes/` folder in the same folder as the entrypoint file, and
-  collects all of the js/ts files within.
-- It reads the `islands/` folder in the same folder as the entrpoint file, and
-  collects all of the js.ts files within.
-- Apparently islands can't have subdirectories?? nightmare.
-- If the manifest data has changed from last time, it writes a new
-  `fresh.gen.ts` in the same folder as the entrypoint file.
-
-dev.ts:
+`dev.ts` is a wrapper that generates a new manifest file, if the routes,
+islands, etc... have changed:
 
 ```ts
 import dev from "fresh/dev.ts";
 await dev("./main.ts");
 ```
 
-### 5. Create a hello, world default route
+## 5. Create a hello, world default route
 
 We have to define the pragma manually so that we know which render function to
 use for the JSX.
 
-Make sure to use the `tsx` extension or you'll see parse errors when you run the
-project.
+Make sure to use the `tsx` extension (if you use JSX) or you'll see parse errors
+when you run the project.
 
 routes/index.tsx:
 
@@ -177,4 +171,10 @@ export default function Home() {
     </div>
   );
 }
+```
+
+## Run it
+
+```sh
+deno task start
 ```
